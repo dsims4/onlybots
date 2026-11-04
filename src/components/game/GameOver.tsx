@@ -1,0 +1,37 @@
+'use client'
+import { returnToGate } from '@/lib/navigation'
+import { useState } from 'react'
+import EndScreen from '@/components/EndScreen'
+import { useSurvivalGame } from './GameProvider'
+
+export default function GameOver() {
+  const { state, saveError, saveResult, restart } = useSurvivalGame()
+  const [restarting, setRestarting] = useState(false)
+  const [restartError, setRestartError] = useState<string | null>(null)
+  const result = state.terminal
+  if (!result) return null
+  async function again(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (restarting) return
+    setRestarting(true)
+    setRestartError(null)
+    // Restart saves first, then clears admission. Keep the bound session for save retries.
+    try { await restart(); returnToGate() }
+    catch (error) {
+      setRestartError(error instanceof Error ? error.message : 'Could not restart. Retry.')
+      setRestarting(false)
+    }
+  }
+  return <EndScreen eyebrow={state.user ? `@${state.user.handle}` : 'onlybots'} title={result.status === 'interrupted' ? 'Run ended.' : 'Human detected.'} failed={result.status === 'failed'}
+    detail={<>
+      {result.status === 'failed' && <p className="muted">{result.measurements[0]?.explanation}</p>}
+      <dl className="game-result-metrics">
+        <div><dt>Time survived</dt><dd>{(result.activeMs / 1000).toFixed(2)}<small>s</small></dd></div>
+        <div><dt>Objectives</dt><dd>{result.completedObjectiveIds.length}</dd></div>
+      </dl>
+      {saveError && <div role="alert"><p className="form-error">{saveError}</p><button className="button-secondary" onClick={() => void saveResult().catch(() => {})}>Retry saving</button></div>}
+      {restartError && <p className="form-error" role="alert">{restartError}</p>}
+    </>}>
+    <form action="/" onSubmit={again}><button className="button-primary" disabled={restarting}>{restarting ? 'Restarting…' : 'Start again'}</button></form>
+  </EndScreen>
+}
